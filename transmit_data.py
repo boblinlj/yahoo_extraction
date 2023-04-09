@@ -30,20 +30,20 @@ def receive_before_cursor_execute(conn, cursor, statement, params, context, exec
         cursor.fast_executemany = True
 
 
-table = 'nasdaq_universe'
+table = 'yahoo_financial_statement_data_control'
 
 sql = """ select * from {}"""
 
 print(f"Reading data from {table}...")
 
-df = pd.read_sql(con=cnn_pod, sql=sql.format(table), index_col='data_id')
+df = pd.read_sql(con=cnn_nas, sql=sql.format(table), index_col='data_id')
 
 print(f"Data Received, {df.shape[0]}...")
 
 df.to_sql(name=table,
-          con=cnn_nas,
+          con=cnn_pod,
           index=False,
           if_exists="append",
-          schema="financial",
+          schema="financial_PROD",
           index_label='data_id',
           chunksize=1000)

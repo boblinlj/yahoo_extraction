@@ -8,7 +8,7 @@ from util.request_website import YahooAPIParser, WebParseError
 from util.database_management import DatabaseManagement, DatabaseManagementError
 from util.get_stock_population import SetPopulation
 from configs.job_configs import WORKER
-from configs import database_configs_prod as prod_dbcfg
+from configs import database_configs_nas as nas_dbcfg
 from sqlalchemy import create_engine
 
 pd.set_option('display.max_columns', None)
@@ -141,6 +141,7 @@ class YahooFinancial:
     def _extract_api(self, stock) -> dict:
         url = self._url_builder_fundamentals().format(stock=stock)
 
+        # default return to None
         data = None
 
         try:
@@ -153,7 +154,7 @@ class YahooFinancial:
         return data
 
     def _extract_each_stock(self, stock) -> None:
-        self.logger.info(f"Processing {stock} for fundamental data")
+        self.logger.info(f"Processing {stock} for financial statements data")
         start = time.time()
         js = self._extract_api(stock)
         if js is None:
@@ -176,41 +177,15 @@ class YahooFinancial:
 
     def _insert_to_db(self, df, stock, table) -> None:
         df_to_insert = df.copy()
+        df_to_insert.replace({np.nan: None}, inplace=True)
         df_to_insert.drop(columns=['periodType'], inplace=True)
         df_to_insert['updated_dt'] = self.updated_dt
         df_to_insert['updated_dt'] = df_to_insert['updated_dt'].astype('str')
         df_to_insert['asOfDate'] = df_to_insert['asOfDate'].astype('str')
         df_to_insert['ticker'] = stock
-        df_to_insert = df_to_insert.replace(np.NaN, None)
-
-        database_ip = prod_dbcfg.MYSQL_HOST
-        database_user = prod_dbcfg.MYSQL_USER
-        database_pw = prod_dbcfg.MYSQL_PASSWORD
-        database_port = prod_dbcfg.MYSQL_PORT
-        database_nm = prod_dbcfg.MYSQL_DATABASE
-
-        cnn = create_engine(
-            f"""mysql+mysqlconnector://{database_user}"""
-            f""":{database_pw}"""
-            f"""@{database_ip}"""
-            f""":{database_port}"""
-            f"""/{database_nm}""",
-            pool_size=20,
-            max_overflow=0)
-        connection = cnn.raw_connection()
-        cursor = connection.cursor()
 
         try:
-            # df_to_insert.to_csv(f'appl_{table}.csv')
-            cols = "`, `".join([str(i) for i in df_to_insert.columns.tolist()])
-            for i, row in df_to_insert.iterrows():
-                sql = "INSERT INTO " + table + "(`" + cols + "`) VALUES(" + " %s,"*(len(row) - 1) + " %s)"
-                # print(row)
-                try:
-                    cursor.execute(sql, tuple(row))
-                except Exception as e:
-                    print(table , e)
-            # DatabaseManagement(data_df=df_to_insert, table=table, insert_index=True, use_prod=True).insert_db()
+            DatabaseManagement(data_df=df_to_insert, table=table, use_prod=False).enter_db_row_by_row()
             self.logger.info(f"{stock} data entered in {table}")
             self.no_of_db_entries += 1
         except DatabaseManagementError as e:
@@ -219,7 +194,9 @@ class YahooFinancial:
     def run(self) -> None:
         start = time.time()
 
+        # get target population to extract the data
         stocks = SetPopulation(user_pop=self.targeted_population, table='yahoo_fundamental').setPop()
+
         if self.test_size is not None:
             if self.test_size >= 0:
                 stocks = stocks[: self.test_size]
@@ -251,10 +228,10 @@ class YahooFinancial:
 
 
 if __name__ == '__main__':
-    spider = YahooFinancial(datetime.datetime.today().date() - datetime.timedelta(days=0),
+    spider = YahooFinancial(updated_dt='2023-04-09',
                             targeted_pop='PREVIOUS_POP',
                             batch=True,
-                            use_tqdm=False,
+                            use_tqdm=True,
                             loggerFileName=None)
-    spider._extract_each_stock('AAPL')
-    # spider.run()
+    # spider._extract_each_stock('AAPL')
+    spider.run()

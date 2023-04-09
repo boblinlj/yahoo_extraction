@@ -2,7 +2,7 @@ from configs import database_configs_nas as dbcfg
 from configs import database_configs_prod as prod_dbcfg
 from sqlalchemy import create_engine
 import pandas as pd
-
+from mysql.connector import errors
 
 class DatabaseManagementError(Exception):
     pass
@@ -12,7 +12,7 @@ class DatabaseManagement:
 
     def __init__(self, data_df=None, table=None, key=None, where=None, date=None, sql=None, insert_index=False, use_prod=False):
         self.data_df = data_df
-        self.table = table
+        self.table_name = table
         self.key = key
         self.where = where
         self.date = date
@@ -55,17 +55,30 @@ class DatabaseManagement:
         try:
             if self.data_df is None or self.data_df.empty:
                 raise DatabaseManagementError(f"dataframe is empty, therefore cannot be inserted")
-            elif self.table is None:
+            elif self.table_name is None:
                 raise DatabaseManagementError(f"table to be inserted is empty, therefore cannot be inserted")
             else:
-                self.data_df.to_sql(name=self.table,
+                self.data_df.to_sql(name=self.table_name,
                                     con=self.cnn,
                                     if_exists='append',
                                     index=self.insert_index,
                                     method='multi',
                                     chunksize=1)
         except Exception as e:
-            raise DatabaseManagementError(f"data insert to {self.table} failed as {e}")
+            raise DatabaseManagementError(f"data insert to {self.table_name} failed as {e}")
+
+    def enter_db_row_by_row(self) -> None:
+        connection = self.cnn.raw_connection()
+        cursor = connection.cursor()
+
+        cols = "`, `".join([str(i) for i in self.data_df.columns.tolist()])
+        for i, row in self.data_df.iterrows():
+            sql = "INSERT INTO " + self.table_name + "(`" + cols + "`) VALUES(" + " %s," * (len(row) - 1) + " %s)"
+            try:
+                cursor.execute(sql, tuple(row))
+                connection.commit()
+            except errors.IntegrityError as e:
+                pass
 
     def read_sql_to_df(self) -> pd.DataFrame:
         """
@@ -99,7 +112,7 @@ class DatabaseManagement:
         """
         return f"""
                     SELECT DISTINCT {self.key}
-                    FROM {self.table}
+                    FROM {self.table_name}
                     WHERE {self.where}
                 """
 
@@ -112,7 +125,7 @@ class DatabaseManagement:
 
         :return: List of unique key elements
         """
-        if all(var is None for var in [self.key, self.table, self.where]):
+        if all(var is None for var in [self.key, self.table_name, self.where]):
             raise DatabaseManagementError(
                 f'Cannot check population, due to critical variable missing (key, table, where)')
         if len(self.key.split(',')) > 1:
@@ -130,7 +143,7 @@ class DatabaseManagement:
 
         :return: Pandas DataFrame
         """
-        if all(var is None for var in [self.key, self.table, self.where]):
+        if all(var is None for var in [self.key, self.table_name, self.where]):
             raise DatabaseManagementError(
                 f'cannot run sql, due to critical variable missing (key, table, where)')
         else:
@@ -144,13 +157,13 @@ class DatabaseManagement:
         :return: Pandas DataFrame
         """
         sql = f"""
-               SELECT "{self.table}" as table_name, updated_dt, count(1) as total_updated
-               FROM  {self.table}
+               SELECT "{self.table_name}" as table_name, updated_dt, count(1) as total_updated
+               FROM  {self.table_name}
                GROUP BY 1,2
                ORDER BY 2 DESC
                LIMIT 1
             """
-        if self.table is None:
+        if self.table_name is None:
             raise DatabaseManagementError(
                 f"Cannot run sql, due to the table name is missing"
             )
