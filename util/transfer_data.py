@@ -59,7 +59,6 @@ class UploadData2GCP:
 
     def run(self):
         for _each_table in self.table_to_upload:
-            print(_each_table)
             days = self.days_to_extract(self.find_the_latest_entry(_each_table), _each_table)
             self.logger.info(f"days {days}")
 
