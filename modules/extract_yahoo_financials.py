@@ -8,8 +8,6 @@ from util.request_website import YahooAPIParser, WebParseError
 from util.database_management import DatabaseManagement, DatabaseManagementError
 from util.get_stock_population import SetPopulation
 from configs.job_configs import WORKER
-from configs import database_configs_nas as nas_dbcfg
-from sqlalchemy import create_engine
 
 pd.set_option('display.max_columns', None)
 
