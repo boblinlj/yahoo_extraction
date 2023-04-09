@@ -1,9 +1,8 @@
 import time
-
 import numpy as np
 import pandas as pd
-from util.helper_functions import create_log
 import datetime
+from util.helper_functions import create_log
 from util.parallel_process import parallel_process
 from util.request_website import YahooAPIParser, WebParseError
 from util.database_management import DatabaseManagement, DatabaseManagementError
@@ -183,7 +182,6 @@ class YahooFinancial:
         df_to_insert['asOfDate'] = df_to_insert['asOfDate'].astype('str')
         df_to_insert['ticker'] = stock
         df_to_insert = df_to_insert.replace(np.NaN, None)
-        # df_to_insert.set_index(['ticker', 'asOfDate'], inplace=True)
 
         database_ip = prod_dbcfg.MYSQL_HOST
         database_user = prod_dbcfg.MYSQL_USER
